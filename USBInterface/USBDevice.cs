@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Runtime.InteropServices; 
+using System.Runtime.InteropServices;
+
+// alternative
+using System.Globalization;
+using System.IO;
+using System.Threading;
 
 namespace USBInterface
 {
-    public class USBDevice
+    public class USBDevice : IDisposable
     {
-        
+
         #region Native Methods
 #if WIN64
         public const string DLL_FILE_NAME = "hidapi64.dll";
@@ -17,287 +22,405 @@ namespace USBInterface
         public const string DLL_FILE_NAME = "hidapi.dll";
 #endif
 
+        /// Return Type: int
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static IntPtr hid_open(ushort vendor_id, ushort product_id, IntPtr serial_number);
+        private static extern int hid_init();
 
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static void hid_close(IntPtr device);
 
+        /// Return Type: int
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static int hid_set_nonblocking(IntPtr device, int nonblock);
+        private static extern int hid_exit();
 
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static int hid_write(IntPtr device, IntPtr data, int length);
 
+        /// Return Type: hid_device*
+        ///vendor_id: unsigned short
+        ///product_id: unsigned short
+        ///serial_number: wchar_t*
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static int hid_read(IntPtr device, IntPtr data, int length);
+        private static extern IntPtr hid_open(ushort vendor_id, ushort product_id, [In] string serial_number);
 
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static int hid_get_manufacturer_string(IntPtr device, IntPtr str, UInt32 size);
 
+        /// Return Type: hid_device*
+        ///path: char*
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-		private extern static int hid_get_product_string(IntPtr device, IntPtr str, UInt32 size);
+        private static extern IntPtr hid_open_path([In] string path);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///data: unsigned char*
+        ///length: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hid_write(IntPtr device, [In] byte[] data, uint length);
+
+
+        /// Return Type: int
+        ///dev: hid_device*
+        ///data: unsigned char*
+        ///length: size_t->unsigned int
+        ///milliseconds: int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hid_read_timeout(IntPtr device, [Out] byte[] buf_data, uint length, int milliseconds);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///data: unsigned char*
+        ///length: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hid_read(IntPtr device, [Out] byte[] buf_data, uint length);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///nonblock: int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private extern static int hid_set_nonblocking(IntPtr device, int nonblock);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///data: char*
+        ///length: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hid_send_feature_report(IntPtr device, [In] byte[] data, uint length);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///data: unsigned char*
+        ///length: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hid_get_feature_report(IntPtr device, [Out] byte[] buf_data, uint length);
+
+
+        /// Return Type: void
+        ///device: hid_device*
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private extern static void hid_close(IntPtr device);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///string: wchar_t*
+        ///maxlen: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
+        private static extern int hid_get_manufacturer_string(IntPtr device, StringBuilder buf_string, uint length);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///string: wchar_t*
+        ///maxlen: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
+        private static extern int hid_get_product_string(IntPtr device, StringBuilder buf_string, uint length);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///string: wchar_t*
+        ///maxlen: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
+        private static extern int hid_get_serial_number_string(IntPtr device, StringBuilder buf_serial, uint maxlen);
+
+
+        /// Return Type: int
+        ///device: hid_device*
+        ///string_index: int
+        ///string: wchar_t*
+        ///maxlen: size_t->unsigned int
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
+        private static extern int hid_get_indexed_string(IntPtr device, int string_index, StringBuilder buf_string, uint maxlen);
+
+
+        /// Return Type: wchar_t*
+        ///device: hid_device*
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
+        private static extern IntPtr hid_error(IntPtr device);
 
         #endregion
 
+        // for async reading
+        private Object syncLock = new object();
+        private Thread readThread = null;
+        private volatile bool asyncReadOn = false;
 
-        public bool HIDisOpen = false;
-        public byte[] BufferOUT;
-        public byte[] BufferIN;
 
-		private IntPtr DeviceHandle;
-		private IntPtr WStringPointer = Marshal.AllocHGlobal(255);
-		private byte[] ByteArray = new byte[255];
+        // Flag: Has Dispose already been called?
+        bool disposed = false;
 
-        private int WStreamPointer = 0;
-        private int RStreamPointer = 0;
-        private int ReportLenght = 64;
-
-        public USBDevice(int reportLen = 64)
-		{
-            ReportLenght = reportLen;
-            BufferOUT = new byte[ReportLenght+1];
-            BufferIN = new byte[ReportLenght+1];
-		}
-        public USBDevice(ushort VendorID, ushort ProductID, int reportLen = 64) 
-		{
-            Open(VendorID, ProductID);
-            ReportLenght = reportLen;
-            BufferOUT = new byte[ReportLenght + 1];
-            BufferIN = new byte[ReportLenght + 1];
-		}
-		private string ParseWString()
-		{
-			try
-			{
-				Marshal.Copy(WStringPointer, ByteArray, 0, 100);
-				ByteArray = Encoding.Convert (Encoding.UTF8, Encoding.ASCII, ByteArray); 
-				string str = Encoding.ASCII.GetString(ByteArray);
-				Marshal.FreeHGlobal (WStringPointer);
-				WStringPointer = IntPtr.Zero;
-				WStringPointer = Marshal.AllocHGlobal(255);
-				int a = str.IndexOf ("?");
-				if (a > 100)
-					a = 100;
-				return str.Substring (0, a);
-			}
-			catch(Exception e)
-			{
-				return "Error Parsing String: " + e.Message;
-			}
-		}
-		public string Description()
-		{
-            string ret = "";
-            if(HIDisOpen)
-		    {
-				hid_get_manufacturer_string(DeviceHandle, WStringPointer, 255);
-				Console.WriteLine ("Manufacturer: " + ParseWString());
-                ret += "Manufacturer: " + ParseWString() + '\n';
-				hid_get_product_string(DeviceHandle, WStringPointer, 255);
-				Console.WriteLine ("Product Name: " + ParseWString());
-                ret += "Product Name: " + ParseWString() + '\n';
-		    }
-            return ret;
-		}
-
-		public void Open(ushort VendorID, ushort ProductID)
-		{
-			if(!HIDisOpen)
-			{
-				DeviceHandle = hid_open(VendorID, ProductID, IntPtr.Zero);
-				if(DeviceHandle != IntPtr.Zero)HIDisOpen=true;
-			}
-		}
-        public void ReOpen(ushort VendorID, ushort ProductID)
+        private int readTimeoutInMillisecs = 10;
+        public int ReadTimeoutInMillisecs
         {
-            if (HIDisOpen)
-                Close();
-            DeviceHandle = hid_open(VendorID, ProductID, IntPtr.Zero);
-            if (DeviceHandle != IntPtr.Zero)
-            {
-                HIDisOpen = true;
-            }
+            get { return readTimeoutInMillisecs; }
+            set { readTimeoutInMillisecs = value; }
         }
-		public void Close()
-		{
-		     if(HIDisOpen)
-		     {
-		        hid_close(DeviceHandle);
-		        hid_set_nonblocking(DeviceHandle,1);
-		        HIDisOpen=false;    
-		     }
-		}
 
-		private void CleanBufferOUT()
-		{
-			int i;
-            for (i = 0; i < ReportLenght+1; i++) BufferOUT[i] = 0x00;     
-		    
-		}
-		private void CleanBufferIN()
-		{
-			int i;
-            for (i = 0; i < ReportLenght + 1; i++) BufferIN[i] = 0x00;     
-		}
-        private void SetBufferOut(byte[] data)
+        public delegate void InputReportArrivedHandler(object sender, ReportEventArgs args);
+        public event EventHandler<ReportEventArgs> InputReportArrivedEvent;
+
+        public delegate void DeviceDisconnectedHandler(object sender, EventArgs args);
+        public event EventHandler DeviceDisconnecedEvent;
+
+        public bool isOpen
         {
-            CleanBufferOUT();
-            BufferOUT[0] = 0;
-            for (int i = 0; i < data.Length; i++)
+            get { return DeviceHandle != IntPtr.Zero; }
+        }
+
+        private IntPtr DeviceHandle = IntPtr.Zero;
+
+        // this will be the return buffer for strings,
+        // make it big, becasue by the HID spec (can not find page)
+        // we are allowed to request more bytes than the device can return.
+        private StringBuilder pOutBuf = new StringBuilder(1024);
+
+        private int ReportLength = 64;
+
+        // HIDAPI does not provide any way to get HID Report Descriptor,
+        // This means you must know in advance what it the report size for your device.
+        // For this reason, reportLen is a necessary parameter to the constructor.
+        // 
+        // Serial Number is optional, pass null (do NOT pass an empty string) if it is unknown.
+        public USBDevice(ushort VendorID
+            , ushort ProductID
+            , string serial_number
+            , int reportLen
+            , InputReportArrivedHandler input_handler)
+        {
+            DeviceHandle = hid_open(VendorID, ProductID, serial_number);
+            AssertValidDev();
+            ReportLength = reportLen;
+            // Build the thread to listen for reads
+            asyncReadOn = true;
+            readThread = new Thread(new ThreadStart(ReadLoop));
+            readThread.Name = "HidApiReadAsyncThread";
+            readThread.Start();
+        }
+
+        private void AssertValidDev()
+        {
+            if (DeviceHandle == IntPtr.Zero) throw new Exception("No device opened");
+        }
+
+        public void GetFeatureReport(byte[] buffer, int length = -1)
+        {
+            AssertValidDev();
+            if (length < 0)
             {
-                BufferOUT[i+1] = data[i];
+                length = buffer.Length;
+            }
+            if (hid_get_feature_report(DeviceHandle, buffer, (uint)length) < 0)
+            {
+                throw new Exception("failed to get feature report");
             }
         }
 
-        public int SendBuffer()
-		{
-            int Result = 0;
-            if(HIDisOpen)
-			{
-				int size = Marshal.SizeOf(BufferOUT[0]) * BufferOUT.Length;
-				IntPtr pnt = Marshal.AllocHGlobal(size);
-				Marshal.Copy(BufferOUT, 0, pnt, BufferOUT.Length);
-                Result = hid_write(DeviceHandle, pnt, ReportLenght + 1);
-			}
-		    else Result = -1;
-
-            if (Result < 0)
-                throw new Exception("USB Has been disconected!");
-
-            return Result;
-		}
-		public int ReciveBuffer()
-		{
-            int Result = 0;
-            CleanBufferIN();
-		    if(HIDisOpen)
-		    {
-		        //res = hid_read_timeout(DeviceHandle, BufferIN, 65,1);
-				int size = Marshal.SizeOf(BufferIN[0]) * BufferIN.Length;
-				IntPtr pnt = Marshal.AllocHGlobal(size);
-                Result = hid_read(DeviceHandle, pnt, ReportLenght + 1);
-				Marshal.Copy (pnt, BufferIN, 0, BufferIN.Length);
-		    }
-            else Result= - 1;
-
-            if (Result < 0)
-                throw new Exception("USB Has been disconected!");
-
-            return Result;
-		}
-        public void WriteString(string str)
+        public void SendFeatureReport(byte[] buffer, int length = -1)
         {
-            if (str.Length > ReportLenght)
+            AssertValidDev();
+            if (length < 0)
+            {
+                length = buffer.Length;
+            }
+            if (hid_send_feature_report(DeviceHandle, buffer, (uint)length) < 0)
+            {
+                throw new Exception("failed to send feature report");
+            }
+        }
+
+        // either everything is good, or throw exception
+        // Meaning InputReport
+        // This function is slightly different, as we must return the number of bytes read.
+        public int ReadRaw(byte[] buffer, int length = -1)
+        {
+            AssertValidDev();
+            if (length < 0)
+            {
+                length = buffer.Length;
+            }
+            int bytes_read = hid_read_timeout(DeviceHandle, buffer, (uint)length, readTimeoutInMillisecs);
+            if (bytes_read < 0)
+            {
+                throw new Exception("Failed to Read.");
+            }
+            return bytes_read;
+        }
+
+        // Meaning OutputReport
+        public void WriteRaw(byte[] buffer, int length = -1)
+        {
+            AssertValidDev();
+            if (length < 0)
+            {
+                length = buffer.Length;
+            }
+            if (hid_write(DeviceHandle, buffer, (uint)length) < 0)
+            {
+                throw new Exception("Failed to write.");
+            }
+        }
+
+        public string GetErrorString()
+        {
+            AssertValidDev();
+            IntPtr ret = hid_error(DeviceHandle);
+            // I can not find the info in the docs, but guess this frees 
+            // the ret pointer after we created a managed string object
+            // else this would be a memory leak
+            return Marshal.PtrToStringAuto(ret);
+        }
+
+        // All the string functions are in a little bit of trouble becasue 
+        // wchar_t is 2 bytes on windows and 4 bytes on linux.
+        // So we should just alloc a hell load of space for the return buffer.
+        // 
+        // We must divide Capacity / 4 because this takes the buffer length in multiples of 
+        // wchar_t whoose length is 4 on Linux and 2 on Windows. So we allocate a big 
+        // buffer beforehand and just divide the capacity by 4.
+        public string GetIndexedString(int index)
+        {
+            AssertValidDev();
+            if (hid_get_indexed_string(DeviceHandle, index, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            {
+                throw new Exception("failed to get indexed string");
+            }
+            return pOutBuf.ToString();
+        }
+
+        public string GetManufacturerString()
+        {
+            AssertValidDev();
+            pOutBuf.Clear();
+            if (hid_get_manufacturer_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            {
+                throw new Exception("failed to get manufacturer string");
+            }
+            return pOutBuf.ToString();
+        }
+
+        public string GetProductString()
+        {
+            AssertValidDev();
+            pOutBuf.Clear();
+            if (hid_get_product_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            {
+                throw new Exception("failed to get product string");
+            }
+            return pOutBuf.ToString();
+        }
+
+        public string GetSerialNumberString()
+        {
+            AssertValidDev();
+            pOutBuf.Clear();
+            if (hid_get_serial_number_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            {
+                throw new Exception("failed to get serial number string");
+            }
+            return pOutBuf.ToString();
+        }
+
+        public string Description()
+        {
+            AssertValidDev();
+            return string.Format("Manufacturer: {0}\nProduct: {1}\nSerial number:{2}\n"
+                , GetManufacturerString(), GetProductString(), GetSerialNumberString());
+        }
+
+
+        public void Write(byte[] user_data)
+        {
+            byte[] output_report = new byte[ReportLength + 1];
+            // byte 0 is command byte
+            output_report[0] = 0;
+            Array.Copy(user_data, 0, output_report, 1, user_data.Length);
+            WriteRaw(output_report);
+        }
+
+        // Returnes a bytes array.
+        // If an error occured while reading an exception will be 
+        // thrown by the underlying ReadRaw method
+        public byte[] Read()
+        {
+            byte[] input_report = new byte[ReportLength + 1];
+            return ReadRaw(input_report) > 0 ? input_report : new byte[0];
+        }
+
+        private void ReadLoop()
+        {
+            var culture = CultureInfo.InvariantCulture;
+            Thread.CurrentThread.CurrentCulture = culture;
+            Thread.CurrentThread.CurrentUICulture = culture;
+
+            while (asyncReadOn)
+            {
+                try
+                {
+                    byte[] res = Read();
+                    // when read >0 bytes, tell others about data
+                    if (res.Length > 0)
+                    {
+                        InputReportArrivedEvent(this, new ReportEventArgs(res));
+                    }
+                }
+                catch (Exception)
+                {
+                    // when read <0 bytes, means an error has occurred
+                    // stop device, break from loop and stop this thread
+                    Dispose();
+                    break;
+                }
+                // when read 0 bytes, sleep and read again
+                Thread.Sleep(1);
+            }
+        }
+
+        // Public implementation of Dispose pattern callable by consumers.
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        // Protected implementation of Dispose pattern.
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposed)
+            {
                 return;
-
-            byte[] array = Encoding.ASCII.GetBytes(str);
-            SetBufferOut(array);
-            SendBuffer();
-        }
-        public string ReadString()
-        {
-            ReciveBuffer();
-            return Encoding.Default.GetString(BufferIN);
-        }
-        public string ReadBytesString()
-        {
-            string ret ="";
-            ReciveBuffer();
-            for (int i = 0; i < ReportLenght + 1; i++)
-            {
-                int temp = (int)BufferIN[i];
-                ret += temp.ToString() + ",";
             }
-            return ret;
-        }
-
-        public void StreamWriteBegin()
-        {
-            CleanBufferOUT();
-            WStreamPointer = 1;
-        }
-        public void StreamWriteChar(char c)
-        {
-            if (WStreamPointer < ReportLenght + 1)
+            if (disposing)
             {
-                BufferOUT[WStreamPointer] = (byte)c;
-                WStreamPointer++;
+                // Free any other managed objects here.
+                if (asyncReadOn)
+                {
+                    asyncReadOn = false;
+                    readThread.Join(500);
+                    if (readThread.IsAlive)
+                    {
+                        readThread.Abort();
+                    }
+                }
+                if (isOpen)
+                {
+                    AssertValidDev();
+                    hid_close(DeviceHandle);
+                    DeviceHandle = IntPtr.Zero;
+                }
+                hid_exit();
             }
-        }
-        public void StreamWriteInt16(short num)
-        {
-            if (WStreamPointer + 1 < ReportLenght+1)
-            {
-                BufferOUT[WStreamPointer] = (byte)((num >> 8) & 0xff);
-                WStreamPointer++;
-                BufferOUT[WStreamPointer] = (byte)(num & 0xff);
-                WStreamPointer++;
-            }
-        }
-        public void StreamWriteInt32(int num)
-        {
-            if (WStreamPointer + 3 < ReportLenght + 1)
-            {
-                BufferOUT[WStreamPointer] = (byte)((num >> 24) & 0xff);
-                WStreamPointer++;
-                BufferOUT[WStreamPointer] = (byte)((num >> 16) & 0xff);
-                WStreamPointer++;
-                BufferOUT[WStreamPointer] = (byte)((num >> 8) & 0xff);
-                WStreamPointer++;
-                BufferOUT[WStreamPointer] = (byte)(num&0xff);
-                WStreamPointer++; 
-            }
+            // Free any unmanaged objects here.
+            // mark object as having been disposed
+            disposed = true;
         }
 
-        public void StreamReadBegin()
+        private string EncodeBuffer(byte[] buffer)
         {
-            RStreamPointer = 0;
-        }
-        public char StreamReadChar()
-        {
-            char ret = ' ';
-            if (RStreamPointer < ReportLenght + 1)
-            {
-                ret = (char)BufferIN[RStreamPointer];
-                RStreamPointer++;
-            }
-            return ret;
-        }
-        public short StreamReadInt16()
-        {
-            short ret = 0;
-            if (RStreamPointer + 3 < ReportLenght + 1)
-            {
-                ret |= (short)(BufferIN[RStreamPointer] << 8);
-                RStreamPointer++;
-                ret |= (short)(BufferIN[RStreamPointer]);
-                RStreamPointer++;
-            }
-            return ret;
-        }
-        public int StreamReadInt32()
-        {
-            int ret = 0;
-            if (RStreamPointer + 3 < ReportLenght + 1)
-            {
-                ret |= (int)(BufferIN[RStreamPointer] << 24);
-                RStreamPointer++;
-                ret |= (int)(BufferIN[RStreamPointer] << 16);
-                RStreamPointer++;
-                ret |= (int)(BufferIN[RStreamPointer] << 8);
-                RStreamPointer++;
-                ret |= (int)(BufferIN[RStreamPointer]);
-                RStreamPointer++;
-            }
-            return ret;
-        }
-        public float StreamReadFloat()
-        {
-            float ret = (float)System.BitConverter.ToSingle(BufferIN, RStreamPointer);
-            RStreamPointer+=4;
-            return ret;
+            // the buffer contains trailing '\0' char to mark its end.
+            return Encoding.Unicode.GetString(buffer).Trim('\0');
         }
 
     }
 }
+
+
