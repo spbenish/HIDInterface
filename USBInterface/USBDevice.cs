@@ -173,45 +173,57 @@ namespace USBInterface
         // buffer beforehand and just divide the capacity by 4.
         public string GetIndexedString(int index)
         {
-            AssertValidDev();
-            if (HidApi.hid_get_indexed_string(DeviceHandle, index, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            lock(syncLock)
             {
-                throw new Exception("failed to get indexed string");
+                AssertValidDev();
+                if (HidApi.hid_get_indexed_string(DeviceHandle, index, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+                {
+                    throw new Exception("failed to get indexed string");
+                }
+                return pOutBuf.ToString();
             }
-            return pOutBuf.ToString();
         }
 
         public string GetManufacturerString()
         {
-            AssertValidDev();
-            pOutBuf.Clear();
-            if (HidApi.hid_get_manufacturer_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            lock (syncLock)
             {
-                throw new Exception("failed to get manufacturer string");
+                AssertValidDev();
+                pOutBuf.Clear();
+                if (HidApi.hid_get_manufacturer_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+                {
+                    throw new Exception("failed to get manufacturer string");
+                }
+                return pOutBuf.ToString();
             }
-            return pOutBuf.ToString();
         }
 
         public string GetProductString()
         {
-            AssertValidDev();
-            pOutBuf.Clear();
-            if (HidApi.hid_get_product_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            lock (syncLock)
             {
-                throw new Exception("failed to get product string");
+                AssertValidDev();
+                pOutBuf.Clear();
+                if (HidApi.hid_get_product_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+                {
+                    throw new Exception("failed to get product string");
+                }
+                return pOutBuf.ToString();
             }
-            return pOutBuf.ToString();
         }
 
         public string GetSerialNumberString()
         {
-            AssertValidDev();
-            pOutBuf.Clear();
-            if (HidApi.hid_get_serial_number_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            lock (syncLock)
             {
-                throw new Exception("failed to get serial number string");
+                AssertValidDev();
+                pOutBuf.Clear();
+                if (HidApi.hid_get_serial_number_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+                {
+                    throw new Exception("failed to get serial number string");
+                }
+                return pOutBuf.ToString();
             }
-            return pOutBuf.ToString();
         }
 
         public string Description()
