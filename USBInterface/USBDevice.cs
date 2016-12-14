@@ -20,130 +20,20 @@ namespace USBInterface
     public class USBDevice : IDisposable
     {
 
-        #region Native Methods
-#if WIN64
-        public const string DLL_FILE_NAME = "hidapi64.dll";
-#else
-        public const string DLL_FILE_NAME = "hidapi.dll";
-#endif
+        public event EventHandler<ReportEventArgs> InputReportArrivedEvent;
+        public event EventHandler DeviceDisconnecedEvent;
 
-        /// Return Type: int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_init();
+        public bool isOpen
+        {
+            get { return DeviceHandle != IntPtr.Zero; }
+        }
 
-
-        /// Return Type: int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_exit();
-
-
-        /// Return Type: hid_device*
-        ///vendor_id: unsigned short
-        ///product_id: unsigned short
-        ///serial_number: wchar_t*
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr hid_open(ushort vendor_id, ushort product_id, [In] string serial_number);
-
-
-        /// Return Type: hid_device*
-        ///path: char*
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr hid_open_path([In] string path);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///data: unsigned char*
-        ///length: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_write(IntPtr device, [In] byte[] data, uint length);
-
-
-        /// Return Type: int
-        ///dev: hid_device*
-        ///data: unsigned char*
-        ///length: size_t->unsigned int
-        ///milliseconds: int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_read_timeout(IntPtr device, [Out] byte[] buf_data, uint length, int milliseconds);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///data: unsigned char*
-        ///length: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_read(IntPtr device, [Out] byte[] buf_data, uint length);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///nonblock: int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private extern static int hid_set_nonblocking(IntPtr device, int nonblock);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///data: char*
-        ///length: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_send_feature_report(IntPtr device, [In] byte[] data, uint length);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///data: unsigned char*
-        ///length: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private static extern int hid_get_feature_report(IntPtr device, [Out] byte[] buf_data, uint length);
-
-
-        /// Return Type: void
-        ///device: hid_device*
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
-        private extern static void hid_close(IntPtr device);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///string: wchar_t*
-        ///maxlen: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
-        private static extern int hid_get_manufacturer_string(IntPtr device, StringBuilder buf_string, uint length);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///string: wchar_t*
-        ///maxlen: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
-        private static extern int hid_get_product_string(IntPtr device, StringBuilder buf_string, uint length);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///string: wchar_t*
-        ///maxlen: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
-        private static extern int hid_get_serial_number_string(IntPtr device, StringBuilder buf_serial, uint maxlen);
-
-
-        /// Return Type: int
-        ///device: hid_device*
-        ///string_index: int
-        ///string: wchar_t*
-        ///maxlen: size_t->unsigned int
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
-        private static extern int hid_get_indexed_string(IntPtr device, int string_index, StringBuilder buf_string, uint maxlen);
-
-
-        /// Return Type: wchar_t*
-        ///device: hid_device*
-        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Auto)]
-        private static extern IntPtr hid_error(IntPtr device);
-
-        #endregion
+        private int readTimeoutInMillisecs = 1;
+        public int ReadTimeoutInMillisecs
+        {
+            get { return readTimeoutInMillisecs; }
+            set { readTimeoutInMillisecs = value; }
+        }
 
         // for async reading
         private Object syncLock = new object();
@@ -154,22 +44,6 @@ namespace USBInterface
         // Flag: Has Dispose already been called?
         // Marked as volatile because Dispose() can be called from another thread.
         private volatile bool disposed = false;
-
-        private int readTimeoutInMillisecs = 100;
-        public int ReadTimeoutInMillisecs
-        {
-            get { return readTimeoutInMillisecs; }
-            set { readTimeoutInMillisecs = value; }
-        }
-
-        public event EventHandler<ReportEventArgs> InputReportArrivedEvent;
-
-        public event EventHandler DeviceDisconnecedEvent;
-
-        public bool isOpen
-        {
-            get { return DeviceHandle != IntPtr.Zero; }
-        }
 
         private IntPtr DeviceHandle = IntPtr.Zero;
 
@@ -201,7 +75,7 @@ namespace USBInterface
             , int reportLen
             , bool HasReportIDs)
         {
-            DeviceHandle = hid_open(VendorID, ProductID, serial_number);
+            DeviceHandle = HidApi.hid_open(VendorID, ProductID, serial_number);
             AssertValidDev();
             ReportLength = reportLen;
             hasReportIds = HasReportIDs;
@@ -219,7 +93,7 @@ namespace USBInterface
             {
                 length = buffer.Length;
             }
-            if (hid_get_feature_report(DeviceHandle, buffer, (uint)length) < 0)
+            if (HidApi.hid_get_feature_report(DeviceHandle, buffer, (uint)length) < 0)
             {
                 throw new Exception("failed to get feature report");
             }
@@ -232,7 +106,7 @@ namespace USBInterface
             {
                 length = buffer.Length;
             }
-            if (hid_send_feature_report(DeviceHandle, buffer, (uint)length) < 0)
+            if (HidApi.hid_send_feature_report(DeviceHandle, buffer, (uint)length) < 0)
             {
                 throw new Exception("failed to send feature report");
             }
@@ -248,7 +122,7 @@ namespace USBInterface
             {
                 length = buffer.Length;
             }
-            int bytes_read = hid_read_timeout(DeviceHandle, buffer, (uint)length, readTimeoutInMillisecs);
+            int bytes_read = HidApi.hid_read_timeout(DeviceHandle, buffer, (uint)length, readTimeoutInMillisecs);
             if (bytes_read < 0)
             {
                 throw new Exception("Failed to Read.");
@@ -264,7 +138,7 @@ namespace USBInterface
             {
                 length = buffer.Length;
             }
-            if (hid_write(DeviceHandle, buffer, (uint)length) < 0)
+            if (HidApi.hid_write(DeviceHandle, buffer, (uint)length) < 0)
             {
                 throw new Exception("Failed to write.");
             }
@@ -273,7 +147,7 @@ namespace USBInterface
         public string GetErrorString()
         {
             AssertValidDev();
-            IntPtr ret = hid_error(DeviceHandle);
+            IntPtr ret = HidApi.hid_error(DeviceHandle);
             // I can not find the info in the docs, but guess this frees 
             // the ret pointer after we created a managed string object
             // else this would be a memory leak
@@ -290,7 +164,7 @@ namespace USBInterface
         public string GetIndexedString(int index)
         {
             AssertValidDev();
-            if (hid_get_indexed_string(DeviceHandle, index, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            if (HidApi.hid_get_indexed_string(DeviceHandle, index, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
             {
                 throw new Exception("failed to get indexed string");
             }
@@ -301,7 +175,7 @@ namespace USBInterface
         {
             AssertValidDev();
             pOutBuf.Clear();
-            if (hid_get_manufacturer_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            if (HidApi.hid_get_manufacturer_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
             {
                 throw new Exception("failed to get manufacturer string");
             }
@@ -312,7 +186,7 @@ namespace USBInterface
         {
             AssertValidDev();
             pOutBuf.Clear();
-            if (hid_get_product_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            if (HidApi.hid_get_product_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
             {
                 throw new Exception("failed to get product string");
             }
@@ -323,7 +197,7 @@ namespace USBInterface
         {
             AssertValidDev();
             pOutBuf.Clear();
-            if (hid_get_serial_number_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
+            if (HidApi.hid_get_serial_number_string(DeviceHandle, pOutBuf, (uint)pOutBuf.Capacity / 4) < 0)
             {
                 throw new Exception("failed to get serial number string");
             }
@@ -450,11 +324,11 @@ namespace USBInterface
                     lock(syncLock)
                     {
                         AssertValidDev();
-                        hid_close(DeviceHandle);
+                        HidApi.hid_close(DeviceHandle);
                         DeviceHandle = IntPtr.Zero;
                     }
                 }
-                hid_exit();
+                HidApi.hid_exit();
             }
             // Free any unmanaged objects here.
             // mark object as having been disposed
