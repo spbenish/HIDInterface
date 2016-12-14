@@ -324,21 +324,26 @@ namespace USBInterface
                         readThread.Abort();
                     }
                 }
-                if (isOpen)
-                {
-                    // so we are not reading or writing as the device gets closed
-                    lock(syncLock)
-                    {
-                        AssertValidDev();
-                        HidApi.hid_close(DeviceHandle);
-                        DeviceHandle = IntPtr.Zero;
-                    }
-                }
-                HidApi.hid_exit();
             }
-            // Free any unmanaged objects here.
+            // Free any UN-managed objects here.
+            if (isOpen)
+            {
+                // so we are not reading or writing as the device gets closed
+                lock(syncLock)
+                {
+                    AssertValidDev();
+                    HidApi.hid_close(DeviceHandle);
+                    DeviceHandle = IntPtr.Zero;
+                }
+            }
+            HidApi.hid_exit();
             // mark object as having been disposed
             disposed = true;
+        }
+
+        ~USBDevice()
+        {
+            Dispose(false);
         }
 
         private string EncodeBuffer(byte[] buffer)
