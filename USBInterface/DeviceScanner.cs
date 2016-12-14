@@ -55,7 +55,7 @@ namespace USBInterface
             return HidApi.hid_enumerate(vid, pid) != IntPtr.Zero;
         }
 
-        public void RunAsyncScan()
+        public void StartAsyncScan()
         {
             // Build the thread to listen for reads
             asyncScanOn = true;

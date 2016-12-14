@@ -82,7 +82,7 @@ namespace USBInterface
         public USBDevice(ushort VendorID
             , ushort ProductID
             , string serial_number
-            , bool HasReportIDs
+            , bool HasReportIDs = true
             , int defaultInputReportLen = -1)
         {
             DeviceHandle = HidApi.hid_open(VendorID, ProductID, serial_number);
@@ -259,7 +259,7 @@ namespace USBInterface
             }
         }
 
-        public void RunAsyncRead()
+        public void StartAsyncRead()
         {
             // Build the thread to listen for reads
             asyncReadOn = true;
