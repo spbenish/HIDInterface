@@ -5,7 +5,7 @@ using System.Text;
 
 namespace USBInterface
 {
-    class ArrayHelpers
+    public class ArrayHelpers
     {
         public void StreamWriteChar(char c, byte[] stream, int index)
         {

@@ -4,18 +4,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
-
-// alternative
 using System.Globalization;
-using System.IO;
 using System.Threading;
 
 namespace USBInterface
 {
-
-    public delegate void InputReportArrivedHandler(object sender, ReportEventArgs args);
-
-    public delegate void DeviceDisconnectedHandler(object sender, EventArgs args);
 
     public class USBDevice : IDisposable
     {
@@ -51,10 +44,9 @@ namespace USBInterface
         }
 
         // for async reading
-        private Object syncLock = new object();
+        private object syncLock = new object();
         private Thread readThread;
         private volatile bool asyncReadOn = false;
-
 
         // Flag: Has Dispose already been called?
         // Marked as volatile because Dispose() can be called from another thread.
@@ -77,7 +69,7 @@ namespace USBInterface
         // the prefix byte is NOT inserted. On the other hand if the device uses 
         // Report IDs then when reading we must read +1 byte and byte 0 
         // of returned data array will be the Report ID.
-        bool hasReportIds = false;
+        private bool hasReportIds = false;
 
         // HIDAPI does not provide any way to get HID Report Descriptor,
         // This means you must know in advance what it the report size for your device.
