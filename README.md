@@ -10,7 +10,7 @@ http://stackoverflow.com/questions/15368376/options-for-hidapi-on-os-x
 
 
 # Getting started
-```
+```csharp
 class Program
 {
 
