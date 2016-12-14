@@ -59,7 +59,9 @@ namespace USBInterface
         // we are allowed to request more bytes than the device can return.
         private StringBuilder pOutBuf = new StringBuilder(1024);
 
-        private int ReportLength;
+        // This is very convinient to use for the 90% of devices that 
+        // dont use ReportIDs and so have only one input report
+        private int DefaultInputReportLength = -1;
 
         // This only affects the read function.
         // receiving / sending a feature report,
@@ -71,20 +73,21 @@ namespace USBInterface
         // of returned data array will be the Report ID.
         private bool hasReportIds = false;
 
-        // HIDAPI does not provide any way to get HID Report Descriptor,
+        // HIDAPI does not provide any way to get or parse the HID Report Descriptor,
         // This means you must know in advance what it the report size for your device.
         // For this reason, reportLen is a necessary parameter to the constructor.
         // 
         // Serial Number is optional, pass null (do NOT pass an empty string) if it is unknown.
+        // 
         public USBDevice(ushort VendorID
             , ushort ProductID
             , string serial_number
-            , int reportLen
-            , bool HasReportIDs)
+            , bool HasReportIDs
+            , int defaultInputReportLen = -1)
         {
             DeviceHandle = HidApi.hid_open(VendorID, ProductID, serial_number);
             AssertValidDev();
-            ReportLength = reportLen;
+            DefaultInputReportLength = defaultInputReportLen;
             hasReportIds = HasReportIDs;
         }
 
@@ -232,11 +235,22 @@ namespace USBInterface
         // Returnes a bytes array.
         // If an error occured while reading an exception will be 
         // thrown by the underlying ReadRaw method
-        public byte[] Read()
+        //
+        // Note for reportLen: This is the real actual size of the 
+        // actual HID report according to his descriptor, 
+        // so Report Size * Report Count depending on each of the 
+        // Output, Input, Feature reports.
+        public byte[] Read(int reportLen = -1)
         {
             lock(syncLock)
             {
-                int length = hasReportIds ? ReportLength + 1 : ReportLength;
+                int length = reportLen;
+                if (length < 0)
+                {
+                    // when we have Report IDs and the user did not specify the reportLen explicitly
+                    // then add an extra byte to account for the Report ID
+                    length = hasReportIds ? DefaultInputReportLength + 1 : DefaultInputReportLength;
+                }
                 byte[] input_report = new byte[length];
                 int read_bytes = ReadRaw(input_report);
                 byte[] ret = new byte[read_bytes];
