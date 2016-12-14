@@ -223,7 +223,7 @@ namespace USBInterface
             // so we don't read and write at the same time
             lock (syncLock)
             {
-                byte[] output_report = new byte[ReportLength];
+                byte[] output_report = new byte[user_data.Length];
                 Array.Copy(user_data, output_report, output_report.Length);
                 WriteRaw(output_report);
             }
