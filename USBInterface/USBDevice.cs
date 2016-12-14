@@ -12,6 +12,11 @@ using System.Threading;
 
 namespace USBInterface
 {
+
+    public delegate void InputReportArrivedHandler(object sender, ReportEventArgs args);
+
+    public delegate void DeviceDisconnectedHandler(object sender, EventArgs args);
+
     public class USBDevice : IDisposable
     {
 
@@ -142,24 +147,23 @@ namespace USBInterface
 
         // for async reading
         private Object syncLock = new object();
-        private Thread readThread = null;
+        private Thread readThread;
         private volatile bool asyncReadOn = false;
 
 
         // Flag: Has Dispose already been called?
-        bool disposed = false;
+        // Marked as volatile because Dispose() can be called from another thread.
+        private volatile bool disposed = false;
 
-        private int readTimeoutInMillisecs = 10;
+        private int readTimeoutInMillisecs = 100;
         public int ReadTimeoutInMillisecs
         {
             get { return readTimeoutInMillisecs; }
             set { readTimeoutInMillisecs = value; }
         }
 
-        public delegate void InputReportArrivedHandler(object sender, ReportEventArgs args);
         public event EventHandler<ReportEventArgs> InputReportArrivedEvent;
 
-        public delegate void DeviceDisconnectedHandler(object sender, EventArgs args);
         public event EventHandler DeviceDisconnecedEvent;
 
         public bool isOpen
@@ -174,7 +178,7 @@ namespace USBInterface
         // we are allowed to request more bytes than the device can return.
         private StringBuilder pOutBuf = new StringBuilder(1024);
 
-        private int ReportLength = 64;
+        private int ReportLength;
 
         // HIDAPI does not provide any way to get HID Report Descriptor,
         // This means you must know in advance what it the report size for your device.
@@ -231,7 +235,7 @@ namespace USBInterface
         // either everything is good, or throw exception
         // Meaning InputReport
         // This function is slightly different, as we must return the number of bytes read.
-        public int ReadRaw(byte[] buffer, int length = -1)
+        private int ReadRaw(byte[] buffer, int length = -1)
         {
             AssertValidDev();
             if (length < 0)
@@ -247,7 +251,7 @@ namespace USBInterface
         }
 
         // Meaning OutputReport
-        public void WriteRaw(byte[] buffer, int length = -1)
+        private void WriteRaw(byte[] buffer, int length = -1)
         {
             AssertValidDev();
             if (length < 0)
@@ -330,11 +334,15 @@ namespace USBInterface
 
         public void Write(byte[] user_data)
         {
-            byte[] output_report = new byte[ReportLength + 1];
-            // byte 0 is command byte
-            output_report[0] = 0;
-            Array.Copy(user_data, 0, output_report, 1, user_data.Length);
-            WriteRaw(output_report);
+            // so we don't read and write at the same time
+            lock (syncLock)
+            {
+                byte[] output_report = new byte[ReportLength + 1];
+                // byte 0 is command byte
+                output_report[0] = 0;
+                Array.Copy(user_data, 0, output_report, 1, output_report.Length);
+                WriteRaw(output_report);
+            }
         }
 
         // Returnes a bytes array.
@@ -352,13 +360,15 @@ namespace USBInterface
             Thread.CurrentThread.CurrentCulture = culture;
             Thread.CurrentThread.CurrentUICulture = culture;
 
+            // The read has a timeout parameter, so every X milliseconds
+            // we check if the user wants us to continue reading.
             while (asyncReadOn)
             {
                 try
                 {
                     byte[] res = Read();
                     // when read >0 bytes, tell others about data
-                    if (res.Length > 0)
+                    if (res.Length > 0 && this.InputReportArrivedEvent != null)
                     {
                         InputReportArrivedEvent(this, new ReportEventArgs(res));
                     }
@@ -367,7 +377,13 @@ namespace USBInterface
                 {
                     // when read <0 bytes, means an error has occurred
                     // stop device, break from loop and stop this thread
-                    Dispose();
+                    if (this.DeviceDisconnecedEvent != null)
+                    {
+                        DeviceDisconnecedEvent(this, EventArgs.Empty);
+                    }
+                    // call the dispose method in separate thread, 
+                    // otherwise this thread would never get to die
+                    new Thread(Dispose).Start();
                     break;
                 }
                 // when read 0 bytes, sleep and read again
@@ -403,9 +419,13 @@ namespace USBInterface
                 }
                 if (isOpen)
                 {
-                    AssertValidDev();
-                    hid_close(DeviceHandle);
-                    DeviceHandle = IntPtr.Zero;
+                    // so we are not reading or writing as the device gets closed
+                    lock(syncLock)
+                    {
+                        AssertValidDev();
+                        hid_close(DeviceHandle);
+                        DeviceHandle = IntPtr.Zero;
+                    }
                 }
                 hid_exit();
             }
