@@ -180,6 +180,16 @@ namespace USBInterface
 
         private int ReportLength;
 
+        // This only affects the read function.
+        // receiving / sending a feature report,
+        // and writing to device always requiers you to prefix the
+        // data with a Report ID (use 0x00 if device does not use Report IDs)
+        // however when reading if the device does NOT use Report IDs then
+        // the prefix byte is NOT inserted. On the other hand if the device uses 
+        // Report IDs then when reading we must read +1 byte and byte 0 
+        // of returned data array will be the Report ID.
+        bool hasReportIds = false;
+
         // HIDAPI does not provide any way to get HID Report Descriptor,
         // This means you must know in advance what it the report size for your device.
         // For this reason, reportLen is a necessary parameter to the constructor.
@@ -189,16 +199,12 @@ namespace USBInterface
             , ushort ProductID
             , string serial_number
             , int reportLen
-            , InputReportArrivedHandler input_handler)
+            , bool HasReportIDs)
         {
             DeviceHandle = hid_open(VendorID, ProductID, serial_number);
             AssertValidDev();
             ReportLength = reportLen;
-            // Build the thread to listen for reads
-            asyncReadOn = true;
-            readThread = new Thread(new ThreadStart(ReadLoop));
-            readThread.Name = "HidApiReadAsyncThread";
-            readThread.Start();
+            hasReportIds = HasReportIDs;
         }
 
         private void AssertValidDev()
@@ -350,8 +356,29 @@ namespace USBInterface
         // thrown by the underlying ReadRaw method
         public byte[] Read()
         {
-            byte[] input_report = new byte[ReportLength + 1];
-            return ReadRaw(input_report) > 0 ? input_report : new byte[0];
+            lock(syncLock)
+            {
+                int length = hasReportIds ? ReportLength + 1 : ReportLength;
+                byte[] input_report = new byte[length];
+                int read_bytes = ReadRaw(input_report);
+                byte[] ret = new byte[read_bytes];
+                Array.Copy(input_report, 0, ret, 0, read_bytes);
+                return ret;
+            }
+        }
+
+        public void RunAsyncRead()
+        {
+            // Build the thread to listen for reads
+            asyncReadOn = true;
+            readThread = new Thread(ReadLoop);
+            readThread.Name = "HidApiReadAsyncThread";
+            readThread.Start();
+        }
+
+        public void StopAsyncRead()
+        {
+            asyncReadOn = false;
         }
 
         private void ReadLoop()
