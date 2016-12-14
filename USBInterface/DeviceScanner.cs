@@ -1,0 +1,101 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
+using System.Text;
+using System.Threading;
+
+namespace USBInterface
+{
+    public class DeviceScanner
+    { 
+        public event EventHandler DeviceArrived;
+        public event EventHandler DeviceRemoved;
+
+        public bool isDeviceConnected
+        {
+            get { return deviceConnected; }
+        }
+
+        // for async reading
+        private object syncLock = new object();
+        private Thread scannerThread;
+        private volatile bool asyncScanOn = false;
+
+        private volatile bool deviceConnected = false;
+
+        private int scanIntervalMillisecs = 10;
+        public int ScanIntervalInMillisecs
+        {
+            get { lock (syncLock) { return scanIntervalMillisecs; } }
+            set { lock (syncLock) { scanIntervalMillisecs = value; } }
+        }
+
+        private ushort vendorId;
+        private ushort productId;
+
+        // Use this class to monitor when your devices connects.
+        public DeviceScanner(ushort VendorID, ushort ProductID, int scanIntervalMillisecs = 100)
+        {
+            vendorId = VendorID;
+            productId = ProductID;
+            ScanIntervalInMillisecs = scanIntervalMillisecs;
+        }
+    
+        public void RunAsyncScan()
+        {
+            // Build the thread to listen for reads
+            asyncScanOn = true;
+            scannerThread = new Thread(ScanLoop);
+            scannerThread.Name = "HidApiAsyncDeviceScanThread";
+            scannerThread.Start();
+        }
+
+        public void StopAsyncScan()
+        {
+            asyncScanOn = false;
+        }
+
+        private void ScanLoop()
+        {
+            var culture = CultureInfo.InvariantCulture;
+            Thread.CurrentThread.CurrentCulture = culture;
+            Thread.CurrentThread.CurrentUICulture = culture;
+
+            // The read has a timeout parameter, so every X milliseconds
+            // we check if the user wants us to continue scanning.
+            while (asyncScanOn)
+            {
+                try
+                {
+                    bool device_on_bus = HidApi.hid_enumerate(vendorId, productId) != IntPtr.Zero;
+                    if (device_on_bus && ! deviceConnected)
+                    {
+                        // just found new device
+                        deviceConnected = true;
+                        if (DeviceArrived != null)
+                        {
+                            DeviceArrived(this, EventArgs.Empty);
+                        }
+                    }
+                    if (! device_on_bus && deviceConnected)
+                    {
+                        // just lost device connection
+                        deviceConnected = false;
+                        if (DeviceRemoved != null)
+                        {
+                            DeviceRemoved(this, EventArgs.Empty);
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    // stop scan, user can manually restart again with StartAsyncScan()
+                    asyncScanOn = false;
+                }
+                // when read 0 bytes, sleep and read again
+                Thread.Sleep(ScanIntervalInMillisecs);
+            }
+        }
+    }
+}
