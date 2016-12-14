@@ -211,16 +211,13 @@ namespace USBInterface
                 , GetManufacturerString(), GetProductString(), GetSerialNumberString());
         }
 
-
         public void Write(byte[] user_data)
         {
             // so we don't read and write at the same time
             lock (syncLock)
             {
-                byte[] output_report = new byte[ReportLength + 1];
-                // byte 0 is command byte
-                output_report[0] = 0;
-                Array.Copy(user_data, 0, output_report, 1, output_report.Length);
+                byte[] output_report = new byte[ReportLength];
+                Array.Copy(user_data, output_report, output_report.Length);
                 WriteRaw(output_report);
             }
         }
