@@ -31,17 +31,30 @@ namespace USBInterface
             set { lock (syncLock) { scanIntervalMillisecs = value; } }
         }
 
+        public bool isScanning
+        {
+            get { return asyncScanOn; }
+        }
+
         private ushort vendorId;
         private ushort productId;
 
         // Use this class to monitor when your devices connects.
+        // Note that scanning for device when it is open by another process will return FALSE
+        // even though the device is connected (because the device is unavailiable)
         public DeviceScanner(ushort VendorID, ushort ProductID, int scanIntervalMillisecs = 100)
         {
             vendorId = VendorID;
             productId = ProductID;
             ScanIntervalInMillisecs = scanIntervalMillisecs;
         }
-    
+
+        // scanning for device when it is open by another process will return false
+        public static bool ScanOnce(ushort vid, ushort pid)
+        {
+            return HidApi.hid_enumerate(vid, pid) != IntPtr.Zero;
+        }
+
         public void RunAsyncScan()
         {
             // Build the thread to listen for reads
