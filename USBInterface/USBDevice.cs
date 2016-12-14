@@ -28,11 +28,26 @@ namespace USBInterface
             get { return DeviceHandle != IntPtr.Zero; }
         }
 
+        // If the read process grabs ownership of device
+        // and blocks (unable to get any data from device) 
+        // for more than Timeout millisecons 
+        // it will abandon reading, pause for readIntervalInMillisecs
+        // and try reading again.
         private int readTimeoutInMillisecs = 1;
         public int ReadTimeoutInMillisecs
         {
-            get { return readTimeoutInMillisecs; }
-            set { readTimeoutInMillisecs = value; }
+            get { lock (syncLock) { return  readTimeoutInMillisecs; } }
+            set { lock(syncLock) {  readTimeoutInMillisecs = value; } }
+        }
+
+        // Interval of time between two reads,
+        // during this time the device is free and 
+        // we can write to it.
+        private int readIntervalInMillisecs = 1;
+        public int ReadIntervalInMillisecs
+        {
+            get { lock (syncLock) { return readIntervalInMillisecs; } }
+            set { lock(syncLock) { readIntervalInMillisecs = value; } }
         }
 
         // for async reading
@@ -285,7 +300,9 @@ namespace USBInterface
                     break;
                 }
                 // when read 0 bytes, sleep and read again
-                Thread.Sleep(1);
+                // We must sleep for some time to allow others
+                // to write to the device.
+                Thread.Sleep(readIntervalInMillisecs);
             }
         }
 
