@@ -349,7 +349,7 @@ namespace USBInterface
                 if (asyncReadOn)
                 {
                     asyncReadOn = false;
-                    readThread.Join(500);
+                    readThread.Join(readTimeoutInMillisecs);
                     if (readThread.IsAlive)
                     {
                         readThread.Abort();
@@ -357,12 +357,11 @@ namespace USBInterface
                 }
             }
             // Free any UN-managed objects here.
-            if (isOpen)
+            // so we are not reading or writing as the device gets closed
+            lock (syncLock)
             {
-                // so we are not reading or writing as the device gets closed
-                lock(syncLock)
+                if (isOpen)
                 {
-                    AssertValidDev();
                     HidApi.hid_close(DeviceHandle);
                     DeviceHandle = IntPtr.Zero;
                 }
