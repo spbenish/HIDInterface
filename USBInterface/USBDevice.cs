@@ -36,7 +36,7 @@ namespace USBInterface
         // Interval of time between two reads,
         // during this time the device is free and 
         // we can write to it.
-        private int readIntervalInMillisecs = 1;
+        private int readIntervalInMillisecs = 4;
         public int ReadIntervalInMillisecs
         {
             get { lock (syncLock) { return readIntervalInMillisecs; } }
@@ -274,6 +274,11 @@ namespace USBInterface
         public void StartAsyncRead()
         {
             // Build the thread to listen for reads
+            if (asyncReadOn)
+            {
+                // dont run more than one read
+                return;
+            }
             asyncReadOn = true;
             readThread = new Thread(ReadLoop);
             readThread.Name = "HidApiReadAsyncThread";
