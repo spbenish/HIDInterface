@@ -58,6 +58,11 @@ namespace USBInterface
         public void StartAsyncScan()
         {
             // Build the thread to listen for reads
+            if (asyncScanOn)
+            {
+                // dont run more than one thread
+                return;
+            }
             asyncScanOn = true;
             scannerThread = new Thread(ScanLoop);
             scannerThread.Name = "HidApiAsyncDeviceScanThread";
@@ -81,7 +86,11 @@ namespace USBInterface
             {
                 try
                 {
-                    bool device_on_bus = HidApi.hid_enumerate(vendorId, productId) != IntPtr.Zero;
+                    IntPtr device_info = HidApi.hid_enumerate(vendorId, productId);
+                    bool device_on_bus = device_info != IntPtr.Zero;
+                    // freeing the enumeration releases the device, 
+                    // do it as soon as you can, so we dont block device from others
+                    HidApi.hid_free_enumeration(device_info);
                     if (device_on_bus && ! deviceConnected)
                     {
                         // just found new device
