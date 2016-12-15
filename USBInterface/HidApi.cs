@@ -30,6 +30,11 @@ namespace USBInterface
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr hid_enumerate(ushort vendor_id, ushort product_id);
 
+        /// Return Type: void
+        ///devs: struct hid_device_info*
+        [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
+		public static extern void hid_free_enumeration(IntPtr devs);
+
         /// Return Type: hid_device*
         ///vendor_id: unsigned short
         ///product_id: unsigned short
