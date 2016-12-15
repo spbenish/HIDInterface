@@ -115,6 +115,34 @@ because it is busy. The moral is: the DeviceScanner is not perfect.
 
 
 
+If you have a gui app and you attach an event handler to USBDevice events make sure you use Invoke or BeginInvoke in your handler function.
+like so:
+```csharp
+// some place assign the handler
+dev.InputReportReceivedHandler += this.DataHandler;
+
+// ....
+
+private void DataHandler(object sender, InputReportEventArgs args)
+{
+    if (this.InvokeRequired)
+    {
+        try 
+        {
+            this.Invoke(new Action<object, InputReportEventArgs>(DataHandler), sender, args);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
+        return;
+    }
+
+    // body of your method
+}
+```
+
+
 # Important things for development
 
 ## How to understand HID
