@@ -9,11 +9,14 @@ namespace USBInterface
     internal class HidApi
     {
         #region Native Methods
-#if WIN64
-        public const string DLL_FILE_NAME = "hidapi64.dll";
-#else
-        public const string DLL_FILE_NAME = "hidapi.dll";
-#endif
+
+        // On windows for system installed: hidapi.dll
+        // On linux for system installed: "libhidapi-hidraw" or "libhidapi-libusb"
+        // unfortunately there is no way simple to automatically
+        // find the library on all platforms becasue of different
+        // naming conventions.
+        // Just use hidapi and expect users to supply it in same folder as .exe
+        public const string DLL_FILE_NAME = "hidapi";
 
         /// Return Type: int
         [DllImport(DLL_FILE_NAME, CallingConvention = CallingConvention.Cdecl)]
