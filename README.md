@@ -72,10 +72,12 @@ class Program
 
 ## Common question
 
+
+
+### Using HIDAPI, how can you query the raw report descriptor?
+
 This is from stack overflow:
 http://stackoverflow.com/questions/17706853/using-hidapi-how-can-you-query-the-raw-report-descriptor
-
-Question: Using HIDAPI, how can you query the raw report descriptor?
 
 Answer: HIDAPI does not provide functions for getting or parsing the report descriptor. 
 Since HIDAPI is for talking to a custom devices, these devices will likely contain all 
@@ -84,18 +86,33 @@ or mostly vendor-defined report items anyway.
 So this implies that you should not use hidapi to work with printers/keyboards whose discriptors are not know beforehand.
 For that you should look into the libusb project.
 
+### Why is it called USBInterface if its a hid wrapper and can not really work with generic usb?
+Thats what the original maintainer called it. One day I might change the name to HIDInterface.
 
 ## Gotchas
 
+First of make sure your application is the same bitness as the compiled dll (32-bit aka 86) / (64-bit aka x64)
+
+Because of the naming differences for hidapi dynamic library on all the platforms, this wrapper uses
+"hidapi" as the dll name and let windows or mono try to handle extension resolution. But unfortunately
+this means that it is your job to put either hidapi.dll (windows) or hidapi.so (linux) file in 
+the solution directory together with USBInterface.dll (this library).
+
+When you think you have set everything up the simplest way to check that things are working is to call DeviceScanner.ScanOnce function.
+
+When setting this up on linux remember that linux by default requiers root permission to read and write to device. The DeviceScanner class should work regardless of root access.
+
+On linux you would probably want to set up a udev rule so that you device is automatically remounted and at members of some group (like 'devices') can access the device without root.
+
+
 When reading on windows, even if Report IDs are not used, during read function 
 windows still sticks in the first command byte with 0x00 value. This must concern 
-you only if you pass a custom reportLen to the Read function. 
+you _only_ if you pass a custom reportLen to the Read function. 
 For reports that dont use Report IDs, you should set the DefaultInputReportLength in the constructor and 
 this difference of windows to other systems will be handled tansparently and consistently.
 
 (to me this ironically seems pretty logical, because the output and feature reports make 
 use of this command byte, would have been easier to just include it everywhere, BUT this is not by the USB HID spec,)
-
 
 
 According to the USB spec no item length should be larger than 32 bits (where item length is Report Size * Report Count)
@@ -107,7 +124,6 @@ reality is: there are uncompliant USB devices! If you are connecting a hid devic
 `invalid report_size` error, you can increase that limit and recompile your kernel, then it will work. 
 And file a bug too! Because that check is there just for protocol reasons and since kernel devs agreed 
 that 32 does not work, it is then completely redundant!
-
 
 
 And when your device is opened with USBDevice the DeviceScanner will think that the device is disconnected,
@@ -142,6 +158,62 @@ private void DataHandler(object sender, InputReportEventArgs args)
 }
 ```
 
+# How to setup udev rule
+You want to do this so that your programs can access the device without having to use sudo.
+
+So first you should run lsusb to get device id
+```
+$ sudo lsusb
+Bus 003 Device 001: ID 1d6b:0001 Linux Foundation 1.1 root hub
+Bus 002 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 004 Device 013: ID 1234:5678 MyDevice
+```
+
+Since we are not working with just usb, but with hid devices we must be more specific.
+The best way to find the path to your hid device is to run the hidtest program.
+If you installed hidapi from the repo and hence dont have the hidtest program,
+my advice is: now is a good time to download the source. Because you want to know
+the exact path as hidapi sees it.
+
+Anyway the hidtest program will list all hid devices and their paths such as
+```
+sudo ./hidtest-hidraw
+
+Device Found
+  type: 1234 5678
+  path: /dev/hidraw3
+  serial_number: 0
+  Manufacturer: Nice Guy
+  Product:      MyDevice from Nice Guy
+  Release:      100
+  Interface:    0
+```
+
+Now you ask udev what it knows about the device and you put in the "/dev/hidraw3":
+```
+sudo udevadm info -a -p $(udevadm info -q path -n /dev/hidraw3)
+```
+
+From its output you build a udev rule and after reboot all should work.
+Important: when building the file make sure to query `SUBSYSTEM=="hidraw"` and not `"usb"`
+Oh and `SUBSYSTEM` != `SUBSYSTEMS` <- watch the trailing `S`
+Example rule file:
+```
+sudo cat udev/rules.d/xy-mydevice.rules
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", GROUP="john", MODE="0660"
+```
+
+Then to test you can run `udevadm monitor` in one console to view all device paths
+and in another:
+```
+# check your udev rule
+usedadm test $(udevadm info -q path -n /dev/hidraw3)
+# force reread config
+udevadm control --reload
+# you should re-plug the device to be extra sure
+udevadm trigger
+```
+
 
 # Important things for development
 
@@ -162,10 +234,27 @@ Both of the above are extremely good sources.
 Talks about report descriptors, same as the specification but in normal english:
 http://eleccelerator.com/tutorial-about-usb-hid-report-descriptors/
 
+On linux by default lsusb is unable to show you the report descriptor even with sudo. Before that you need to unbind the device. But hid devices are not different to usual usb devices and they must be unbound from the hid-generic driver using their HID ID.
+
+source for example: http://unix.stackexchange.com/questions/12005/how-to-use-linux-kernel-driver-bind-unbind-interface-for-usb-hid-devices#13035
+
+Example: dmesg shows:
+```
+hid-generic 0003:046D:C229.0036: input,hiddev0,hidraw4: USB HID v1.11 Keypad [Logitech G19 Gaming Keyboard] on usb-0000:00:13.2-3.2/input1
+```
+Then you use 0003:046D:C229.0036 as HID device id and
+```
+echo -n "0003:046D:C229.0036" > /sys/bus/hid/drivers/hid-generic/unbind
+```
+To bind back just reinsert device or
+```
+echo -n "0003:046D:C229.0036" > /sys/bus/hid/drivers/hid-generic/bind
+```
+
+
+
 
 ## How to work with unamanged code and import unamanaged DLL
-
-0) First of make sure your application is the same bitness as the compiled dll (32-bit aka 86) / (64-bit aka x64)
 
 
 1) You must use:
