@@ -24,7 +24,7 @@ namespace USBInterface
         public IntPtr next; //HidDeviceInfo pointer
     }
 
-    public struct HidDeviceInfo
+    public class HidDeviceInfo
     {
         public string path;
         public ushort vendor_id;
@@ -49,6 +49,21 @@ namespace USBInterface
             usage_page = raw.usage_page;
             usage = raw.usage;
             interface_number = raw.interface_number;
+        }
+
+        public override int GetHashCode()
+        {
+            return path.GetHashCode();
+        }
+
+        public override bool Equals(object obj)
+        {
+            HidDeviceInfo info = obj as HidDeviceInfo;
+            if (info != null)
+            {
+                return path == info.path;
+            }
+            return false;
         }
     }
 

@@ -159,12 +159,6 @@ namespace USBInterface
                     var added_devices = devices.Except(_devices);
                     var removed_devices = _devices.Except(devices);
 
-                    // Set up the devices list.
-                    lock (syncLock)
-                    {
-                        _devices = devices;
-                    }
-
                     foreach (var device in added_devices)
                     {
                         DeviceArrivedArgs args = new DeviceArrivedArgs(device);
@@ -175,6 +169,12 @@ namespace USBInterface
                     {
                         DeviceRemovedArgs args = new DeviceRemovedArgs(device);
                         DeviceRemoved?.Invoke(this, args);
+                    }
+
+                    // Set up the devices list.
+                    lock (syncLock)
+                    {
+                        _devices = devices;
                     }
                 }
                 catch (Exception e)
